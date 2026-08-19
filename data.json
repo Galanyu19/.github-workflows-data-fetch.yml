@@ -1,38 +1,39 @@
 [
   {
-    "timestamp": "2026-08-19 19:48",
+    "timestamp": "2026-08-19 19:57",
     "station": "C.2",
-    "water_level": 18.47,
-    "flow": 625.0
+    "flow": 625.0,
+    "water_level": 18.47
   },
   {
-    "timestamp": "2026-08-19 19:48",
+    "timestamp": "2026-08-19 19:57",
     "station": "C.13",
-    "water_level": 6.91,
-    "flow": 250.0
+    "flow": 250.0,
+    "water_level_up": 16.5,
+    "water_level_down": 6.91
   },
   {
-    "timestamp": "2026-08-19 19:48",
+    "timestamp": "2026-08-19 19:57",
     "station": "C.7A",
-    "water_level": 1.42,
-    "flow": 0.0
+    "flow": 0.0,
+    "water_level": 1.42
   },
   {
-    "timestamp": "2026-08-19 19:48",
+    "timestamp": "2026-08-19 19:57",
     "station": "C.36",
-    "water_level": 1.04,
-    "flow": 0.0
+    "flow": 0.0,
+    "water_level": 1.04
   },
   {
-    "timestamp": "2026-08-19 19:48",
+    "timestamp": "2026-08-19 19:57",
     "station": "C.46",
-    "water_level": 2.15,
-    "flow": 0.0
+    "flow": 0.0,
+    "water_level": 2.15
   },
   {
-    "timestamp": "2026-08-19 19:48",
+    "timestamp": "2026-08-19 19:57",
     "station": "C.47",
-    "water_level": 0.85,
-    "flow": 0.0
+    "flow": 0.0,
+    "water_level": 0.85
   }
 ]
