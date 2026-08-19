@@ -16,7 +16,7 @@ jobs:
       - name: Fetch and Process Data
         run: |
           pip install requests beautifulsoup4 pytz
-          python3 -s -c '
+          python3 -c '
           import requests
           from bs4 import BeautifulSoup
           from datetime import datetime
