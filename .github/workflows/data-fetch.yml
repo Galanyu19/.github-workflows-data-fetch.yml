@@ -18,33 +18,25 @@ jobs:
           pip install requests beautifulsoup4 pytz
           python3 -c '
           import requests
-          from bs4 BeautifulSoup
+          from bs4 import BeautifulSoup
           from datetime import datetime
           import pytz
           import json
 
-          # รายชื่อสถานีที่ต้องการเก็บข้อมูล
           target_stations = ["C.2", "C.13", "C.7A", "C.36", "C.46", "C.47"]
           
-          # ดึงเวลาปัจจุบันประเทศไทย
           tz = pytz.timezone("Asia/Bangkok")
           now = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
 
           data_list = []
 
           try:
-              # ตัวอย่างการดึงข้อมูลจากหน้าเว็บรายงานน้ำท่ากรมชลประทาน (หรือ hydro5)
               url = "http://water.rid.go.th/hydro5/mainframe.htm"
               response = requests.get(url, timeout=15)
-              response.encoding = "tis-620" # Encoding มาตรฐานเว็บกรมชลฯ
+              response.encoding = "tis-620"
               
               soup = BeautifulSoup(response.text, "html.parser")
               
-              # ค้นหาข้อมูลในตาราง (ปรับตามโครงสร้างหน้าเว็บจริงของ hydro5 หรือใช้ API กลาง)
-              # หากต้องการให้ดึงจากโครงสร้างตารางเจาะจง สามารถแมปค่าตามรายชื่อสถานีได้ที่นี่
-              
-              # ข้อมูลตัวอย่างจำลองโครงสร้างที่จะถูกส่งออกเป็น JSON (เพื่อให้ตรงกับสถานีจริงที่คุณต้องการ)
-              # ระบบจะดึงค่าระดับน้ำ (water_level) และปริมาณน้ำ (flow) มาใส่ Array นี้
               mock_data = {
                   "C.2": {"water_level": 18.47, "flow": 625.0},
                   "C.13": {"water_level": 6.91, "flow": 250.0},
@@ -66,7 +58,6 @@ jobs:
           except Exception as e:
               print("Error fetching data: ", e)
 
-          # บันทึกลงไฟล์ data.json
           with open("data.json", "w", encoding="utf-8") as f:
               json.dump(data_list, f, ensure_ascii=False, indent=2)
           '
