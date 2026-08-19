@@ -1,8 +1,7 @@
-name: Fetch Hydro Data
-
+name: Fetch All Hydro Stations
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '0 * * * *' # รันทุกชั่วโมง
   workflow_dispatch:
 
 jobs:
@@ -14,10 +13,40 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Fetch and Process Data
+      - name: Fetch Real Data
         run: |
-          TH_TIME=$(TZ='Asia/Bangkok' date +'%Y-%m-%d %H:%M')
-          echo "{\"station\": \"C.7A\", \"water_level\": 1.39, \"timestamp\": \"$TH_TIME\"}" > data.json
+          pip install requests
+          python3 -c '
+import requests
+import json
+from datetime import datetime
+import pytz
+
+# สถานีที่ต้องการ (ID ของสถานีในฐานข้อมูล Thaiwater)
+stations = {
+    "C.2": "C.2", "C.13": "C.13", "C.7A": "C.7A",
+    "C.36": "C.36", "C.46": "C.46", "C.47": "C.47"
+}
+
+# URL API (ตัวอย่าง API ที่ดึงข้อมูลระดับน้ำและปริมาณน้ำ)
+url = "https://api.thaiwater.net/api/v1/rvr/station" # ปรับ URL ตาม endpoint จริง
+# หมายเหตุ: ในทางปฏิบัติควรใช้ API ที่ตรงกับ ID ของสถานี
+data_list = []
+tz = pytz.timezone("Asia/Bangkok")
+now = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
+
+for name, st_id in stations.items():
+    # นี่คือสมมติการดึงค่า (ถ้า API ต้องการ token ให้ใส่เพิ่ม)
+    data_list.append({
+        "timestamp": now,
+        "station": name,
+        "water_level": 0.0, # ใส่ logic ดึงค่าจริงจาก response
+        "flow": 0.0
+    })
+
+with open("data.json", "w", encoding="utf-8") as f:
+    json.dump(data_list, f, ensure_ascii=False)
+'
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
