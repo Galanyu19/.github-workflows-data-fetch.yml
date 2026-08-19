@@ -16,7 +16,8 @@ jobs:
 
       - name: Fetch and Process Data
         run: |
-          echo '{"station": "C.7A", "water_level": 1.39, "timestamp": "'$(date +'%Y-%m-%d %H:%M')'"}' > data.json
+          TH_TIME=$(TZ='Asia/Bangkok' date +'%Y-%m-%d %H:%M')
+          echo "{\"station\": \"C.7A\", \"water_level\": 1.39, \"timestamp\": \"$TH_TIME\"}" > data.jsonon
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
