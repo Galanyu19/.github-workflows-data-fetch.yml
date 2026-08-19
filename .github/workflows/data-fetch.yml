@@ -1,7 +1,7 @@
 name: Fetch Hydro Stations Data
 on:
   schedule:
-    - cron: '0 * * * *' # รันอัตโนมัติทุกๆ 1 ชั่วโมง
+    - cron: '0 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -16,7 +16,7 @@ jobs:
       - name: Fetch and Process Data
         run: |
           pip install requests beautifulsoup4 pytz
-          python3 -c '
+          python3 -s -c '
           import requests
           from bs4 import BeautifulSoup
           from datetime import datetime
@@ -24,50 +24,41 @@ jobs:
           import json
 
           target_stations = ["C.2", "C.13", "C.7A", "C.36", "C.46", "C.47"]
-          
           tz = pytz.timezone("Asia/Bangkok")
           now = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
-
           data_list = []
 
           try:
               url = "http://water.rid.go.th/hydro5/mainframe.htm"
               response = requests.get(url, timeout=15)
               response.encoding = "tis-620"
-              
               soup = BeautifulSoup(response.text, "html.parser")
-              
-              # ปรับโครงสร้างข้อมูลให้รองรับการแยกค่าของ C.13
+          except Exception as e:
+              print("Error loading web: ", e)
+
           mock_data = {
-              "C.2": {"wl": 18.47, "flow": 625.0, "type": "ปกติ"},
-              "C.13": {"wl_up": 16.50, "wl_down": 6.91, "flow": 250.0}, # เพิ่ม wl_up และ wl_down
-              "C.7A": {"wl": 1.42, "flow": 0.0, "type": "ปกติ"},
-              "C.36": {"wl": 1.04, "flow": 0.0, "type": "ปกติ"},
-              "C.46": {"wl": 2.15, "flow": 0.0, "type": "ปกติ"},
-              "C.47": {"wl": 0.85, "flow": 0.0, "type": "ปกติ"}
+              "C.2": {"wl": 18.47, "flow": 625.0},
+              "C.13": {"wl_up": 16.50, "wl_down": 6.91, "flow": 250.0},
+              "C.7A": {"wl": 1.42, "flow": 0.0},
+              "C.36": {"wl": 1.04, "flow": 0.0},
+              "C.46": {"wl": 2.15, "flow": 0.0},
+              "C.47": {"wl": 0.85, "flow": 0.0}
           }
 
           for st in target_stations:
-              info = mock_data.get(st, {"wl": 0.0, "flow": 0.0})
-              
-              # เตรียมข้อมูลสำหรับบันทึก
+              info = mock_data.get(st, {})
               entry = {
                   "timestamp": now,
                   "station": st,
                   "flow": info.get("flow", 0.0)
               }
-              
-              # แยกเงื่อนไขการเก็บระดับน้ำ
               if st == "C.13":
                   entry["water_level_up"] = info.get("wl_up", 0.0)
                   entry["water_level_down"] = info.get("wl_down", 0.0)
               else:
                   entry["water_level"] = info.get("wl", 0.0)
-                  
+              
               data_list.append(entry)
-
-          except Exception as e:
-              print("Error fetching data: ", e)
 
           with open("data.json", "w", encoding="utf-8") as f:
               json.dump(data_list, f, ensure_ascii=False, indent=2)
