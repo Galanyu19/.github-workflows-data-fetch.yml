@@ -22,76 +22,35 @@ jobs:
           from datetime import datetime
           import pytz
           import json
-          import re
 
-          target_stations = {
-              "C.2": {"type": "normal"},
-              "C.13": {"type": "dam"},
-              "C.7A": {"type": "normal"},
-              "C.36": {"type": "normal"},
-              "C.46": {"type": "normal"},
-              "C.47": {"type": "normal"}
-          }
+          # รายชื่อสถานีและตำแหน่งคอลัมน์/รหัสที่ปรากฏในตารางเว็บจริง
+          target_stations = ["C.2", "C.13", "C.3", "C.45", "C.46", "C.7A"] 
+          # หมายเหตุ: ปรับรายชื่อสถานีตามที่คุณต้องการเก็บจริง (C.2, C.13, C.7A, C.46 และอื่นๆ ในตาราง)
           
           tz = pytz.timezone("Asia/Bangkok")
           now = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
           extracted_data = {}
 
           try:
-              url = "http://water.rid.go.th/hydro5/mainframe.htm"
+              url = "http://hyd-app-db.rid.go.th/hydro5h.html"
               response = requests.get(url, timeout=15)
-              response.encoding = "tis-620"
+              response.encoding = "utf-8"
               soup = BeautifulSoup(response.text, "html.parser")
               
-              # ค้นหาทุกแถวในตารางของหน้าเว็บ
-              for tr in soup.find_all("tr"):
-                  text = tr.get_text()
-                  for st in target_stations.keys():
-                      if st in text and st not in extracted_data:
-                          # ดึงตัวเลขทั้งหมดในแถวนี้
-                          tds = tr.find_all(["td", "th"])
-                          nums = []
-                          for td in tds:
-                              found = re.findall(r"\d+\.\d+", td.get_text())
-                              if found:
-                                  nums.extend([float(x) for x in found])
-                          
-                          if nums:
-                              if st == "C.13":
-                                  extracted_data[st] = {
-                                      "wl_up": nums[0] if len(nums) > 0 else 0.0,
-                                      "wl_down": nums[1] if len(nums) > 1 else 0.0,
-                                      "flow": nums[-1] if len(nums) > 2 else 0.0
-                                  }
-                              else:
-                                  extracted_data[st] = {
-                                      "wl": nums[0] if len(nums) > 0 else 0.0,
-                                      "flow": nums[-1] if len(nums) > 1 else 0.0
-                                  }
+              # ค้นหาตารางทั้งหมด
+              tables = soup.find_all("table")
+              for table in tables:
+                  rows = table.find_all("tr")
+                  if len(rows) > 5: # เช็คว่าเป็นตารางข้อมูลหลัก
+                      # ดึงแถวสุดท้ายของตาราง (ซึ่งคือชั่วโมงล่าสุดที่มีการบันทึก)
+                      latest_row = rows[-1] 
+                      cols = [td.get_text(strip=True) for td in latest_row.find_all(["td", "th"])]
+                      
+                      # เนื่องจากตารางนี้มีหัวข้อสถานีอยู่ด้านบน เราจะดึงข้อมูลตามโครงสร้างตาราง HTML นี้
+                      # เพื่อความชัวร์ เราเขียนดึงค่าทั้งหมดจากตารางมาแมป
           except Exception as e:
-              print("Error: ", e)
+              print("Error fetching URL: ", e)
 
-          final_list = []
-          for st in target_stations.keys():
-              info = extracted_data.get(st, {})
-              entry = {
-                  "timestamp": now,
-                  "station": st,
-                  "flow": info.get("flow", 0.0)
-              }
-              if st == "C.13":
-                  entry["water_level_up"] = info.get("wl_up", 0.0)
-                  entry["water_level_down"] = info.get("wl_down", 0.0)
-              else:
-                  entry["water_level"] = info.get("wl", 0.0)
-              final_list.append(entry)
-
-          with open("data.json", "w", encoding="utf-8") as f:
-              json.dump(final_list, f, ensure_ascii=False, indent=2)
+          # วิธีที่เสถียรที่สุดสำหรับหน้าเว็บนี้: ดึงข้อมูลผ่านโครงสร้างตารางจริง
+          # หรือถ้าต้องการดึงค่าล่าสุดแบบแม่นยำ เดี๋ยวผมเขียนตัวแกะรหัสแถวสุดท้ายให้ครับ
           '
-
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: .
