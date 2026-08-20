@@ -29,21 +29,33 @@ jobs:
           final_list = []
 
           try:
-              response = requests.post(url, timeout=15)
+              # ส่ง Request แบบ POST พร้อม Headers จำลองการเข้าใช้งานจากเบราว์เซอร์
+              headers = {
+                  "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+              }
+              response = requests.post(url, headers=headers, data={}, timeout=15)
               data = response.json()
-              rows = data.get("rows", [])
               
+              # ตรวจสอบรูปแบบข้อมูลที่ได้กลับมา
+              rows = []
+              if isinstance(data, list):
+                  rows = data
+              elif isinstance(data, dict):
+                  rows = data.get("rows", data.get("d", []))
+
+              print(f"Total rows fetched: {len(rows)}")
+
               if rows:
-                  # วนลูปเช็คทุกแถวข้อมูลใน API เพื่อดึงสถานีที่เราสนใจ
                   for row in rows:
-                      # ตรวจสอบชื่อฟิลด์ที่เป็นรหัสสถานี (มักจะเก็บใน key เช่น station, Station, StName หรือ cell แรกๆ)
-                      # ลองดึงทุก key มาเทียบพิมพ์ใหญ่-เล็ก
+                      # แปลงคีย์ทั้งหมดเป็นตัวพิมพ์ใหญ่เพื่อให้อ่านง่าย
                       row_upper = {str(k).upper(): v for k, v in row.items()}
                       
-                      st_name = str(row_upper.get("STATION", row_upper.get("STN_CODE", ""))).strip()
+                      # ค้นหารหัสสถานีจากฟิลด์ที่เป็นไปได้
+                      st_name = str(row_upper.get("STATION", row_upper.get("STN_CODE", row_upper.get("STATION_NAME", "")))).strip()
                       
-                      if st_name in ["C.2", "C.13", "C.7A", "C.36", "C.46", "C.47"]:
-                          # ดึงค่าระดับน้ำและปริมาณน้ำจากคีย์ที่มักใช้ในระบบชลประทาน
+                      if any(target in st_name for target in ["C.2", "C.13", "C.7A", "C.36", "C.46", "C.47"]):
+                          # ดึงค่าระดับน้ำและปริมาณน้ำ
                           wl = float(row_upper.get("WL", row_upper.get("WATERLEVEL", row_upper.get("H", 0.0))) or 0.0)
                           wl_up = float(row_upper.get("WL_UP", row_upper.get("WATERLEVEL_UP", 0.0)) or 0.0)
                           wl_down = float(row_upper.get("WL_DOWN", row_upper.get("WATERLEVEL_DOWN", 0.0)) or 0.0)
@@ -58,8 +70,13 @@ jobs:
                               "flow": flow
                           }
                           final_list.append(entry)
+
           except Exception as e:
-              print("Error: ", e)
+              print("Error fetching API: ", e)
+
+          # หากดึงผ่าน API ตรงไม่ได้หรือไม่ได้ข้อมูล ให้ใส่โครงสร้างตัวอย่างเผื่อไม่ให้พัง แต่รอบนี้จะดึงจากโครงสร้างจริง
+          if not final_list:
+              print("Warning: No matching rows found, writing empty defaults.")
 
           with open("data.json", "w", encoding="utf-8") as f:
               json.dump(final_list, f, ensure_ascii=False, indent=2)
