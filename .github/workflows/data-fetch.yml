@@ -24,10 +24,18 @@ jobs:
           import json
           import re
 
-          target_stations = ["C.2", "C.13", "C.7A", "C.36", "C.46", "C.47"]
+          target_stations = {
+              "C.2": {"type": "normal"},
+              "C.13": {"type": "dam"},
+              "C.7A": {"type": "normal"},
+              "C.36": {"type": "normal"},
+              "C.46": {"type": "normal"},
+              "C.47": {"type": "normal"}
+          }
+          
           tz = pytz.timezone("Asia/Bangkok")
           now = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
-          data_list = {}
+          extracted_data = {}
 
           try:
               url = "http://water.rid.go.th/hydro5/mainframe.htm"
@@ -35,38 +43,37 @@ jobs:
               response.encoding = "tis-620"
               soup = BeautifulSoup(response.text, "html.parser")
               
-              # ค้นหาตารางทั้งหมดในหน้าเว็บ
-              tables = soup.find_all("table")
-              for table in tables:
-                  rows = table.find_all("tr")
-                  for row in rows:
-                      cols = row.find_all(["td", "th"])
-                      cols_text = [col.text.strip() for col in cols]
-                      
-                      # วนหาชื่อสถานีในตาราง
-                      for st in target_stations:
-                          for text in cols_text:
-                              if st in text:
-                                  # พยายามดึงตัวเลขจากแถวเดียวกัน
-                                  numbers = []
-                                  for col in cols_text:
-                                      # ค้นหาตัวเลขทศนิยม
-                                      found = re.findall(r"\d+\.\d+", col)
-                                      if found:
-                                          numbers.extend([float(x) for x in found])
-                                  
-                                  if numbers:
-                                      if st == "C.13" and len(numbers) >= 2:
-                                          data_list[st] = {"wl_up": numbers[0], "wl_down": numbers[1], "flow": numbers[-1] if len(numbers) > 2 else 0.0}
-                                      else:
-                                          data_list[st] = {"wl": numbers[0], "flow": numbers[-1] if len(numbers) > 1 else 0.0}
+              # ค้นหาทุกแถวในตารางของหน้าเว็บ
+              for tr in soup.find_all("tr"):
+                  text = tr.get_text()
+                  for st in target_stations.keys():
+                      if st in text and st not in extracted_data:
+                          # ดึงตัวเลขทั้งหมดในแถวนี้
+                          tds = tr.find_all(["td", "th"])
+                          nums = []
+                          for td in tds:
+                              found = re.findall(r"\d+\.\d+", td.get_text())
+                              if found:
+                                  nums.extend([float(x) for x in found])
+                          
+                          if nums:
+                              if st == "C.13":
+                                  extracted_data[st] = {
+                                      "wl_up": nums[0] if len(nums) > 0 else 0.0,
+                                      "wl_down": nums[1] if len(nums) > 1 else 0.0,
+                                      "flow": nums[-1] if len(nums) > 2 else 0.0
+                                  }
+                              else:
+                                  extracted_data[st] = {
+                                      "wl": nums[0] if len(nums) > 0 else 0.0,
+                                      "flow": nums[-1] if len(nums) > 1 else 0.0
+                                  }
           except Exception as e:
-              print("Error scraping: ", e)
+              print("Error: ", e)
 
-          # จัดรูปแบบข้อมูลเตรียมส่งออก
-          final_data = []
-          for st in target_stations:
-              info = data_list.get(st, {})
+          final_list = []
+          for st in target_stations.keys():
+              info = extracted_data.get(st, {})
               entry = {
                   "timestamp": now,
                   "station": st,
@@ -77,10 +84,10 @@ jobs:
                   entry["water_level_down"] = info.get("wl_down", 0.0)
               else:
                   entry["water_level"] = info.get("wl", 0.0)
-              final_data.append(entry)
+              final_list.append(entry)
 
           with open("data.json", "w", encoding="utf-8") as f:
-              json.dump(final_data, f, ensure_ascii=False, indent=2)
+              json.dump(final_list, f, ensure_ascii=False, indent=2)
           '
 
       - name: Deploy to GitHub Pages
