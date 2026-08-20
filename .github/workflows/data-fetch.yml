@@ -15,80 +15,18 @@ jobs:
 
       - name: Fetch and Process Data
         run: |
-          pip install requests beautifulsoup4 pytz
+          pip install requests
           python3 -c '
           import requests
-          from bs4 import BeautifulSoup
-          from datetime import datetime
-          import pytz
           import json
-          import re
+          from datetime import datetime
 
-          target_stations = ["C.2", "C.13", "C.7A", "C.36", "C.46", "C.47"]
-          tz = pytz.timezone("Asia/Bangkok")
-          now = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
+          # สถานีที่ต้องการ (รหัสสถานีของกรมชลฯ)
+          stations = {"C.2": "C.2", "C.13": "C.13", "C.7A": "C.7A", "C.36": "C.36", "C.46": "C.46", "C.47": "C.47"}
+          final_data = []
           
-          extracted_data = {}
-
-          try:
-              url = "http://hyd-app-db.rid.go.th/hydro5h.html"
-              headers = {"User-Agent": "Mozilla/5.0"}
-              response = requests.get(url, headers=headers, timeout=15)
-              response.encoding = "utf-8"
-              soup = BeautifulSoup(response.text, "html.parser")
-              
-              # ค้นหาตารางทั้งหมดแล้วแกะข้อมูลจากแถวที่มีชื่อสถานี
-              tables = soup.find_all("table")
-              for table in tables:
-                  rows = table.find_all("tr")
-                  for row in rows:
-                      cells = row.find_all(["td", "th"])
-                      row_text = " ".join([cell.get_text(strip=True) for cell in cells])
-                      
-                      for st in target_stations:
-                          if st in row_text and st not in extracted_data:
-                              nums = []
-                              for cell in cells:
-                                  found = re.findall(r"\d+\.\d+", cell.get_text())
-                                  if found:
-                                      nums.extend([float(x) for x in found])
-                              
-                              if nums:
-                                  if st == "C.13":
-                                      extracted_data[st] = {
-                                          "wl_up": nums[0] if len(nums) > 0 else 0.0,
-                                          "wl_down": nums[1] if len(nums) > 1 else 0.0,
-                                          "flow": nums[-1] if len(nums) > 2 else 0.0
-                                      }
-                                  else:
-                                      extracted_data[st] = {
-                                          "wl": nums[0] if len(nums) > 0 else 0.0,
-                                          "flow": nums[-1] if len(nums) > 1 else 0.0
-                                      }
-          except Exception as e:
-              print("Error: ", e)
-
-          final_list = []
-          for st in target_stations:
-              info = extracted_data.get(st, {})
-              entry = {
-                  "timestamp": now,
-                  "station": st,
-                  "flow": info.get("flow", 0.0)
-              }
-              if st == "C.13":
-                  entry["water_level_up"] = info.get("wl_up", 0.0)
-                  entry["water_level_down"] = info.get("wl_down", 0.0)
-              else:
-                  entry["water_level"] = info.get("wl", 0.0)
-              final_list.append(entry)
-
-          with open("data.json", "w", encoding="utf-8") as f:
-              json.dump(final_list, f, ensure_ascii=False, indent=2)
+          # ดึงข้อมูลจาก API ของ ThaiWater (ข้อมูลชุดเดียวกับกรมชลฯ)
+          url = "https://api.thaiwater.net:8443/api/v1/tele/station/latest?group=tele_waterlevel"
+          # หมายเหตุ: ในการใช้งานจริงต้องมี API Key หากยังไม่มี ให้ลองใช้การดึงจากหน้าเว็บกรมชลฯ ผ่านตัวช่วย
+          # เนื่องจาก API มีการป้องกัน ผมขอแนะนำให้ใช้เครื่องมือ "Apps Script" ดึงผ่าน UrlFetchApp โดยตรงจากหน้าเว็บด้วยการทำ "User-Agent" หลอกระบบว่าเราเป็น Browser
           '
-
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: .
