@@ -22,31 +22,51 @@ jobs:
           from datetime import datetime
           import pytz
           import json
+          import re
 
           target_stations = ["C.2", "C.13", "C.7A", "C.36", "C.46", "C.47"]
           tz = pytz.timezone("Asia/Bangkok")
           now = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
-          data_list = []
+          data_list = {}
 
           try:
               url = "http://water.rid.go.th/hydro5/mainframe.htm"
               response = requests.get(url, timeout=15)
               response.encoding = "tis-620"
               soup = BeautifulSoup(response.text, "html.parser")
+              
+              # ค้นหาตารางทั้งหมดในหน้าเว็บ
+              tables = soup.find_all("table")
+              for table in tables:
+                  rows = table.find_all("tr")
+                  for row in rows:
+                      cols = row.find_all(["td", "th"])
+                      cols_text = [col.text.strip() for col in cols]
+                      
+                      # วนหาชื่อสถานีในตาราง
+                      for st in target_stations:
+                          for text in cols_text:
+                              if st in text:
+                                  # พยายามดึงตัวเลขจากแถวเดียวกัน
+                                  numbers = []
+                                  for col in cols_text:
+                                      # ค้นหาตัวเลขทศนิยม
+                                      found = re.findall(r"\d+\.\d+", col)
+                                      if found:
+                                          numbers.extend([float(x) for x in found])
+                                  
+                                  if numbers:
+                                      if st == "C.13" and len(numbers) >= 2:
+                                          data_list[st] = {"wl_up": numbers[0], "wl_down": numbers[1], "flow": numbers[-1] if len(numbers) > 2 else 0.0}
+                                      else:
+                                          data_list[st] = {"wl": numbers[0], "flow": numbers[-1] if len(numbers) > 1 else 0.0}
           except Exception as e:
-              print("Error loading web: ", e)
+              print("Error scraping: ", e)
 
-          mock_data = {
-              "C.2": {"wl": 18.47, "flow": 625.0},
-              "C.13": {"wl_up": 16.50, "wl_down": 6.91, "flow": 250.0},
-              "C.7A": {"wl": 1.42, "flow": 0.0},
-              "C.36": {"wl": 1.04, "flow": 0.0},
-              "C.46": {"wl": 2.15, "flow": 0.0},
-              "C.47": {"wl": 0.85, "flow": 0.0}
-          }
-
+          # จัดรูปแบบข้อมูลเตรียมส่งออก
+          final_data = []
           for st in target_stations:
-              info = mock_data.get(st, {})
+              info = data_list.get(st, {})
               entry = {
                   "timestamp": now,
                   "station": st,
@@ -57,11 +77,10 @@ jobs:
                   entry["water_level_down"] = info.get("wl_down", 0.0)
               else:
                   entry["water_level"] = info.get("wl", 0.0)
-              
-              data_list.append(entry)
+              final_data.append(entry)
 
           with open("data.json", "w", encoding="utf-8") as f:
-              json.dump(data_list, f, ensure_ascii=False, indent=2)
+              json.dump(final_data, f, ensure_ascii=False, indent=2)
           '
 
       - name: Deploy to GitHub Pages
