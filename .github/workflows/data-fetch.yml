@@ -26,46 +26,40 @@ jobs:
           tz = pytz.timezone("Asia/Bangkok")
           now = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
           
-          target_stations = {
-              "C.2": {"col_wl": "C2_WL", "col_flow": "C2_Q"},
-              "C.13": {"col_wl_up": "C13_UP", "col_wl_down": "C13_DOWN", "col_flow": "C13_Q"},
-              "C.7A": {"col_wl": "C7A_WL", "col_flow": "C7A_Q"},
-              "C.36": {"col_wl": "C36_WL", "col_flow": "C36_Q"},
-              "C.46": {"col_wl": "C46_WL", "col_flow": "C46_Q"},
-              "C.47": {"col_wl": "C47_WL", "col_flow": "C47_Q"}
-          }
-
           final_list = []
 
           try:
-              headers = {"User-Agent": "Mozilla/5.0"}
-              # เนื่องจาก API นี้เป็น POST อาจจะต้องส่ง Payload ไปด้วย ลองใช้ requests.post ถ้าจำเป็น
-              response = requests.post(url, headers=headers, timeout=15)
+              response = requests.post(url, timeout=15)
               data = response.json()
-              
               rows = data.get("rows", [])
+              
               if rows:
-                  # เอาแถวสุดท้าย (ชั่วโมงล่าสุด)
-                  latest = rows[-1]
-                  
-                  for st, keys in target_stations.items():
-                      entry = {
-                          "timestamp": now,
-                          "station": st
-                      }
-                      if st == "C.13":
-                          entry["water_level_up"] = float(latest.get(keys["col_wl_up"], 0.0) or 0.0)
-                          entry["water_level_down"] = float(latest.get(keys["col_wl_down"], 0.0) or 0.0)
-                          entry["flow"] = float(latest.get(keys["col_flow"], 0.0) or 0.0)
-                      else:
-                          entry["water_level"] = float(latest.get(keys["col_wl"], 0.0) or 0.0)
-                          entry["flow"] = float(latest.get(keys["col_flow"], 0.0) or 0.0)
-                      final_list.append(entry)
+                  # วนลูปเช็คทุกแถวข้อมูลใน API เพื่อดึงสถานีที่เราสนใจ
+                  for row in rows:
+                      # ตรวจสอบชื่อฟิลด์ที่เป็นรหัสสถานี (มักจะเก็บใน key เช่น station, Station, StName หรือ cell แรกๆ)
+                      # ลองดึงทุก key มาเทียบพิมพ์ใหญ่-เล็ก
+                      row_upper = {str(k).upper(): v for k, v in row.items()}
+                      
+                      st_name = str(row_upper.get("STATION", row_upper.get("STN_CODE", ""))).strip()
+                      
+                      if st_name in ["C.2", "C.13", "C.7A", "C.36", "C.46", "C.47"]:
+                          # ดึงค่าระดับน้ำและปริมาณน้ำจากคีย์ที่มักใช้ในระบบชลประทาน
+                          wl = float(row_upper.get("WL", row_upper.get("WATERLEVEL", row_upper.get("H", 0.0))) or 0.0)
+                          wl_up = float(row_upper.get("WL_UP", row_upper.get("WATERLEVEL_UP", 0.0)) or 0.0)
+                          wl_down = float(row_upper.get("WL_DOWN", row_upper.get("WATERLEVEL_DOWN", 0.0)) or 0.0)
+                          flow = float(row_upper.get("Q", row_upper.get("FLOW", 0.0)) or 0.0)
+                          
+                          entry = {
+                              "timestamp": now,
+                              "station": st_name,
+                              "water_level": wl,
+                              "water_level_up": wl_up,
+                              "water_level_down": wl_down,
+                              "flow": flow
+                          }
+                          final_list.append(entry)
           except Exception as e:
-              print("Error fetching API: ", e)
-              # ถ้าดึงพลาด ให้สร้างค่าโครงสร้างเดิมป้องกันเว็บพัง
-              for st in target_stations:
-                  final_list.append({"timestamp": now, "station": st, "flow": 0.0, "water_level": 0.0})
+              print("Error: ", e)
 
           with open("data.json", "w", encoding="utf-8") as f:
               json.dump(final_list, f, ensure_ascii=False, indent=2)
