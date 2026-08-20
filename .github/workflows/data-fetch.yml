@@ -22,27 +22,49 @@ jobs:
           import pytz
           import json
 
-          # ใช้ Endpoint สำหรับดึงรายงานสถานการณ์น้ำรายชั่วโมงของกรมชลฯ
           url = "https://hyd-app-db.rid.go.th/webservice/getGroupHourlyWaterLevelReportAllHL5.ashx"
           tz = pytz.timezone("Asia/Bangkok")
-          now = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
+          now_dt = datetime.now(tz)
           
+          # แปลง ค.ศ. เป็น พ.ศ. และรูปแบบวันที่ให้ตรงกับ Payload (เช่น 20/08/2569)
+          thai_year = now_dt.year + 543
+          date_str = now_dt.strftime(f"%d/%M/%Y").replace(now_dt.strftime("%Y"), str(thai_year))
+          # รูปแบบที่ชัวร์: วัน/เดือน/ปีพศ
+          date_payload = f"{now_dt.day:02d}/{now_dt.month:02d}/{thai_year}"
+          
+          now_timestamp = now_dt.strftime("%Y-%m-%d %H:%M")
           target_stations = ["C.2", "C.13", "C.7A", "C.36", "C.46", "C.47"]
           station_data_map = {}
 
           try:
               headers = {
                   "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-                  "User-Agent": "Mozilla/5.0"
+                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                  "Referer": "https://hyd-app-db.rid.go.th/"
               }
-              response = requests.post(url, headers=headers, data={}, timeout=15)
+              
+              # ส่ง Payload แบบเดียวกับที่ได้จาก Network Tab ของคุณเป๊ะๆ
+              payload = {
+                  "DW[UtokID]": "5",
+                  "DW[BasinID]": "10",
+                  "DW[TimeCurrent]": date_payload,
+                  "_search": "false",
+                  "nd": "1787204516714",
+                  "rows": "100",
+                  "page": "1",
+                  "sidx": "indexhourly",
+                  "sord": "asc"
+              }
+              
+              response = requests.post(url, headers=headers, data=payload, timeout=15)
               data = response.json()
               
-              rows = data if isinstance(data, list) else data.get("rows", data.get("d", []))
+              rows = data if isinstance(data, list) else data.get("rows", data.get("data", []))
 
               for row in rows:
                   row_upper = {str(k).upper(): v for k, v in row.items()}
-                  st_name = str(row_upper.get("STATION", row_upper.get("STN_CODE", ""))).strip()
+                  # ค้นหารหัสสถานีจากฟิลด์ต่างๆ ที่ระบบชลประทานใช้อยู่
+                  st_name = str(row_upper.get("STATION", row_upper.get("STN_CODE", row_upper.get("STATION_NAME", "")))).strip()
                   
                   if st_name in target_stations:
                       station_data_map[st_name] = {
@@ -52,9 +74,8 @@ jobs:
                           "flow": float(row_upper.get("Q", row_upper.get("FLOW", 0.0)) or 0.0)
                       }
           except Exception as e:
-              print("Error fetching main API: ", e)
+              print("Error fetching API with payload: ", e)
 
-          # จัดเรียงชุดข้อมูลตามลำดับสถานีเป้าหมาย
           final_list = []
           for st in target_stations:
               vals = station_data_map.get(st, {
@@ -64,7 +85,7 @@ jobs:
                   "flow": 0.0
               })
               final_list.append({
-                  "timestamp": now,
+                  "timestamp": now_timestamp,
                   "station": st,
                   "water_level": vals["water_level"],
                   "water_level_up": vals["water_level_up"],
