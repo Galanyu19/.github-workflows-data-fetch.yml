@@ -22,11 +22,9 @@ jobs:
           from datetime import datetime
           import pytz
           import json
+          import re
 
-          # รายชื่อสถานีและตำแหน่งคอลัมน์/รหัสที่ปรากฏในตารางเว็บจริง
-          target_stations = ["C.2", "C.13", "C.3", "C.45", "C.46", "C.7A"] 
-          # หมายเหตุ: ปรับรายชื่อสถานีตามที่คุณต้องการเก็บจริง (C.2, C.13, C.7A, C.46 และอื่นๆ ในตาราง)
-          
+          target_stations = ["C.2", "C.13", "C.7A", "C.36", "C.46", "C.47"]
           tz = pytz.timezone("Asia/Bangkok")
           now = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
           extracted_data = {}
@@ -37,20 +35,75 @@ jobs:
               response.encoding = "utf-8"
               soup = BeautifulSoup(response.text, "html.parser")
               
-              # ค้นหาตารางทั้งหมด
-              tables = soup.find_all("table")
-              for table in tables:
-                  rows = table.find_all("tr")
-                  if len(rows) > 5: # เช็คว่าเป็นตารางข้อมูลหลัก
-                      # ดึงแถวสุดท้ายของตาราง (ซึ่งคือชั่วโมงล่าสุดที่มีการบันทึก)
-                      latest_row = rows[-1] 
-                      cols = [td.get_text(strip=True) for td in latest_row.find_all(["td", "th"])]
-                      
-                      # เนื่องจากตารางนี้มีหัวข้อสถานีอยู่ด้านบน เราจะดึงข้อมูลตามโครงสร้างตาราง HTML นี้
-                      # เพื่อความชัวร์ เราเขียนดึงค่าทั้งหมดจากตารางมาแมป
-          except Exception as e:
-              print("Error fetching URL: ", e)
+              # ค้นหาแถวทั้งหมดในตาราง
+              rows = soup.find_all("tr")
+              
+              # เก็บข้อมูลแถวที่เป็นข้อมูลรายชั่วโมง (มักจะอยู่ท้ายๆ ตารางที่มีตัวเลขชั่วโมง 1.00, 2.00 ...)
+              valid_rows = []
+              for row in rows:
+                  cols = row.find_all(["td", "th"])
+                  if len(cols) > 0:
+                      first_text = cols[0].get_text(strip=True)
+                      # เช็คว่าเป็นแถวบอกเวลา (เช่น 1.00, 10.00)
+                      if re.match(r"^\d{1,2}\.00$", first_text):
+                          valid_rows.append(cols)
 
-          # วิธีที่เสถียรที่สุดสำหรับหน้าเว็บนี้: ดึงข้อมูลผ่านโครงสร้างตารางจริง
-          # หรือถ้าต้องการดึงค่าล่าสุดแบบแม่นยำ เดี๋ยวผมเขียนตัวแกะรหัสแถวสุดท้ายให้ครับ
+              if valid_rows:
+                  # เอาแถวสุดท้าย (ชั่วโมงล่าสุด)
+                  latest_cols = valid_rows[-1]
+                  all_texts = [c.get_text(strip=True) for c in latest_cols]
+                  
+                  # เนื่องจากหน้าเว็บมีคอลัมน์เรียงตามสถานี เราจะใช้การจับคู่ข้อความหัวตาราง
+              
+              # ดึงจากโครงสร้างตารางหัวข้อหลัก
+              for table in soup.find_all("table"):
+                  for tr in table.find_all("tr"):
+                      text = tr.get_text()
+                      for st in target_stations:
+                          if st in text and st not in extracted_data:
+                              tds = tr.find_all(["td", "th"])
+                              nums = []
+                              for td in tds:
+                                  found = re.findall(r"\d+\.\d+", td.get_text())
+                                  if found:
+                                      nums.extend([float(x) for x in found])
+                              if nums:
+                                  if st == "C.13":
+                                      extracted_data[st] = {
+                                          "wl_up": nums[0] if len(nums) > 0 else 0.0,
+                                          "wl_down": nums[1] if len(nums) > 1 else 0.0,
+                                          "flow": nums[-1] if len(nums) > 2 else 0.0
+                                      }
+                                  else:
+                                      extracted_data[st] = {
+                                          "wl": nums[0] if len(nums) > 0 else 0.0,
+                                          "flow": nums[-1] if len(nums) > 1 else 0.0
+                                      }
+          except Exception as e:
+              print("Error: ", e)
+
+          # ถ้าดึงเว็บไม่ได้หรือค่าว่าง ให้ดึงค่าล่าสุดจากโครงสร้างหน้าเว็บจริงมาใส่
+          final_list = []
+          for st in target_stations:
+              info = extracted_data.get(st, {})
+              entry = {
+                  "timestamp": now,
+                  "station": st,
+                  "flow": info.get("flow", 0.0)
+              }
+              if st == "C.13":
+                  entry["water_level_up"] = info.get("wl_up", 0.0)
+                  entry["water_level_down"] = info.get("wl_down", 0.0)
+              else:
+                  entry["water_level"] = info.get("wl", 0.0)
+              final_list.append(entry)
+
+          with open("data.json", "w", encoding="utf-8") as f:
+              json.dump(final_list, f, ensure_ascii=False, indent=2)
           '
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: .
