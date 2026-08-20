@@ -15,56 +15,62 @@ jobs:
 
       - name: Fetch and Process Data
         run: |
-          pip install requests beautifulsoup4 pytz
+          pip install requests pytz
           python3 -c '
           import requests
-          from bs4 import BeautifulSoup
           from datetime import datetime
           import pytz
           import json
 
-          # ใช้ URL หน้าเว็บรายงานสถานการณ์น้ำของชลประทานโดยตรง
-          url = "https://hydro-1.rid.go.th/" 
+          # ใช้ Endpoint สำหรับดึงรายงานสถานการณ์น้ำรายชั่วโมงของกรมชลฯ
+          url = "https://hyd-app-db.rid.go.th/webservice/getGroupHourlyWaterLevelReportAllHL5.ashx"
           tz = pytz.timezone("Asia/Bangkok")
           now = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
           
-          final_list = []
+          target_stations = ["C.2", "C.13", "C.7A", "C.36", "C.46", "C.47"]
+          station_data_map = {}
 
           try:
-              # สำรองข้อมูลชุดสถานี Ang Thong (C.2, C.13, C.7A, C.36, C.46, C.47)
-              # เพื่อให้ระบบมีข้อมูลตัวเลขจริงแสดงผลในชีตทันทีโดยไม่ต้องรอ API ล่ม
-              stations = ["C.2", "C.13", "C.7A", "C.36", "C.46", "C.47"]
+              headers = {
+                  "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                  "User-Agent": "Mozilla/5.0"
+              }
+              response = requests.post(url, headers=headers, data={}, timeout=15)
+              data = response.json()
               
-              # ดึงข้อมูลจำลองจาก API สำรองที่เป็นโครงสร้างเปิดของกรมชลฯ
-              api_fallback = "https://ridapp.rid.go.th/water-report/api/tele-stations"
-              res = requests.get(api_fallback, timeout=10)
-              if res.status_code == 200:
-                  data = res.json()
-                  for item in data:
-                      st_code = str(item.get("station_code", "")).strip()
-                      if st_code in stations:
-                          final_list.append({
-                              "timestamp": now,
-                              "station": st_code,
-                              "water_level": float(item.get("water_level", 0.0) or 0.0),
-                              "water_level_up": float(item.get("water_level_up", 0.0) or 0.0),
-                              "water_level_down": float(item.get("water_level_down", 0.0) or 0.0),
-                              "flow": float(item.get("flow", 0.0) or 0.0)
-                          })
-          except Exception as e:
-              print("Fallback error: ", e)
+              rows = data if isinstance(data, list) else data.get("rows", data.get("d", []))
 
-          # หากดึงจาก API สำรองไม่ได้ ให้ใส่ค่าตั้งต้นจริงตามพื้นที่เพื่อไม่ให้หน้าเว็บว่างเปล่า
-          if not final_list:
-              for st in ["C.2", "C.13", "C.7A", "C.36", "C.46", "C.47"]:
-                  final_list.append({
-                      "timestamp": now,
-                      "station": st,
-                      "water_level": 0.0,
-                      "water_level_up": 0.0,
-                      "water_level_down": 0.0,
-                      "flow": 0.0
-                  })
+              for row in rows:
+                  row_upper = {str(k).upper(): v for k, v in row.items()}
+                  st_name = str(row_upper.get("STATION", row_upper.get("STN_CODE", ""))).strip()
+                  
+                  if st_name in target_stations:
+                      station_data_map[st_name] = {
+                          "water_level": float(row_upper.get("WL", row_upper.get("WATERLEVEL", 0.0)) or 0.0),
+                          "water_level_up": float(row_upper.get("WL_UP", row_upper.get("WATERLEVEL_UP", 0.0)) or 0.0),
+                          "water_level_down": float(row_upper.get("WL_DOWN", row_upper.get("WATERLEVEL_DOWN", 0.0)) or 0.0),
+                          "flow": float(row_upper.get("Q", row_upper.get("FLOW", 0.0)) or 0.0)
+                      }
+          except Exception as e:
+              print("Error fetching main API: ", e)
+
+          # จัดเรียงชุดข้อมูลตามลำดับสถานีเป้าหมาย
+          final_list = []
+          for st in target_stations:
+              vals = station_data_map.get(st, {
+                  "water_level": 0.0,
+                  "water_level_up": 0.0,
+                  "water_level_down": 0.0,
+                  "flow": 0.0
+              })
+              final_list.append({
+                  "timestamp": now,
+                  "station": st,
+                  "water_level": vals["water_level"],
+                  "water_level_up": vals["water_level_up"],
+                  "water_level_down": vals["water_level_down"],
+                  "flow": vals["flow"]
+              })
 
           with open("data.json", "w", encoding="utf-8") as f:
               json.dump(final_list, f, ensure_ascii=False, indent=2)
