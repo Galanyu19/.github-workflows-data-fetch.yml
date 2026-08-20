@@ -28,15 +28,7 @@ jobs:
           tz = pytz.timezone("Asia/Bangkok")
           now = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
           
-          # ค่าสำรองมาตรฐาน (กรณีดึงเว็บสดไม่ได้ในบางจังหวะ จะได้ไม่เป็นศูนย์ทั้งหมด)
-          scraped_data = {
-              "C.2": {"wl": 18.49, "flow": 631.0},
-              "C.13": {"wl_up": 16.17, "wl_down": 6.91, "flow": 250.0},
-              "C.7A": {"wl": 1.47, "flow": 0.0},
-              "C.36": {"wl": 1.05, "flow": 0.0},
-              "C.46": {"wl": 2.04, "flow": 0.0},
-              "C.47": {"wl": 0.85, "flow": 0.0}
-          }
+          scraped_data = {}
 
           try:
               url = "http://hyd-app-db.rid.go.th/hydro5h.html"
@@ -44,11 +36,11 @@ jobs:
               response.encoding = "utf-8"
               soup = BeautifulSoup(response.text, "html.parser")
               
-              # ค้นหาตารางและแถวทั้งหมดเพื่อดึงข้อมูลล่าสุด
+              # ค้นหาตารางทั้งหมดในหน้าเว็บเพื่อกวาดข้อมูลสถานีจริง
               for tr in soup.find_all("tr"):
                   text = tr.get_text()
                   for st in target_stations:
-                      if st in text:
+                      if st in text and st not in scraped_data:
                           tds = tr.find_all(["td", "th"])
                           nums = []
                           for td in tds:
@@ -58,13 +50,13 @@ jobs:
                           if nums:
                               if st == "C.13":
                                   scraped_data[st] = {
-                                      "wl_up": nums[0] if len(nums) > 0 else 16.17,
-                                      "wl_down": nums[1] if len(nums) > 1 else 6.91,
-                                      "flow": nums[-1] if len(nums) > 2 else 250.0
+                                      "wl_up": nums[0] if len(nums) > 0 else 0.0,
+                                      "wl_down": nums[1] if len(nums) > 1 else 0.0,
+                                      "flow": nums[-1] if len(nums) > 2 else 0.0
                                   }
                               else:
                                   scraped_data[st] = {
-                                      "wl": nums[0] if len(nums) > 0 else 1.0,
+                                      "wl": nums[0] if len(nums) > 0 else 0.0,
                                       "flow": nums[-1] if len(nums) > 1 else 0.0
                                   }
           except Exception as e:
